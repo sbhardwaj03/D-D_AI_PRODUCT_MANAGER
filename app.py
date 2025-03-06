@@ -36,4 +36,4 @@ if submit_button:
 
 # Redirect to roadmap page using session state
 if st.session_state.page == "roadmap":
-    st.experimental_rerun()  # Refresh the app and go to roadmap
+    st.rerun()  # Refresh the app and go to roadmap
