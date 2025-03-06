@@ -87,7 +87,7 @@ def input_page():
         if st.session_state.product_name and product_description and st.session_state.start_date and st.session_state.end_date:
             st.session_state.team = ", ".join(selected_roles) if selected_roles else "No team selected"
             st.session_state.roadmap_generated = True
-            st.experimental_rerun()
+            st.rerun()
 
 # Roadmap Page
 def roadmap_page():
