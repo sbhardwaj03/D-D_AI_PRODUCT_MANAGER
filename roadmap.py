@@ -4,7 +4,12 @@ import plotly.express as px
 from datetime import datetime
 from groq import Groq
 
-API_KEY = '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'
+API_KEY = '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'
+if not API_KEY:
+    st.error("API key not found. Please set the 'GROQ_API_KEY' environment variable.")
+    st.stop()
+
+# Initialize Groq Client
 client = Groq(api_key=API_KEY)
 
 st.set_page_config(page_title="Generated Roadmap", page_icon="📌", layout="wide")
