@@ -3,7 +3,8 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 from groq import Groq
-
+if "page" not in st.session_state:
+    st.session_state.page = "home"
 API_KEY = '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'
 if not API_KEY:
     st.error("API key not found. Please set the 'GROQ_API_KEY' environment variable.")
