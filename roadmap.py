@@ -4,7 +4,7 @@ import plotly.express as px
 from datetime import datetime
 from groq import Groq
 
-API_KEY = 'your_api_key_here'
+API_KEY = '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'
 client = Groq(api_key=API_KEY)
 
 st.set_page_config(page_title="Generated Roadmap", page_icon="📌", layout="wide")
@@ -79,4 +79,4 @@ else:
 
 if st.button("🔙 Go Back"):
     st.session_state.page = "home"
-    st.experimental_rerun()
+    st.rerun()
