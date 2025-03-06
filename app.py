@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import os
 import plotly.express as px
 from datetime import datetime
 from groq import Groq
@@ -68,11 +67,12 @@ def input_page():
             st.session_state.start_date = st.date_input("📅 Start Date:", value=st.session_state.start_date)
             st.session_state.end_date = st.date_input("📅 End Date:", value=st.session_state.end_date)
         with col2:
-            product_description = st.text_area("📝 Product Description:")        
+            product_description = st.text_area("📝 Product Description:")
 
-        # Validate dates
-        if st.session_state.end_date < st.session_state.start_date:
-            st.error("🚨 End date cannot be earlier than start date.")
+        # Validate dates (only if both dates are selected)
+        if st.session_state.start_date and st.session_state.end_date:
+            if st.session_state.end_date < st.session_state.start_date:
+                st.error("🚨 End date cannot be earlier than start date.")
         
         # Team Building Section
         st.subheader("👥 Build Your Team")
@@ -165,6 +165,6 @@ def roadmap_page():
 
 # Main App Logic
 if not st.session_state.roadmap_generated:
-    input_page()
+    input_page()  # Show the input page
 else:
-    roadmap_page()
+    roadmap_page()  # Show the roadmap page
