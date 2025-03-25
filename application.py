@@ -3,8 +3,10 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 from groq import Groq
+
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import chromadb  # Vector database
 
 # Secure API Key Storage
 API_KEY = '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'
@@ -15,48 +17,60 @@ if not API_KEY:
 # Initialize Groq Client
 client = Groq(api_key=API_KEY)
 
-# Example of external knowledge base (this should be replaced with actual data)
+# Load Embedding Model
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Initialize Vector Database (ChromaDB)
+chroma_client = chromadb.PersistentClient(path="./chroma_db")  # Persistent storage
+collection = chroma_client.get_or_create_collection(name="knowledge_base")
+
+# Example External Knowledge Base (You can expand this)
 knowledge_base = {
     "short_project": "For short projects, prioritize core features and allocate tasks efficiently.",
-    "agile_methodology": "Use agile methodologies for iterative development and quick feedback loops."
+    "agile_methodology": "Use agile methodologies for iterative development and quick feedback loops.",
+    "teamwork": "Encourage open communication and collaboration among team members.",
 }
 
-def retrieve_relevant_data(query):
-    # Use a model to create vector representations
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    query_vector = model.encode(query)
-    
-    # Simplified example of retrieving relevant data
-    relevant_data = ""
-    for key, value in knowledge_base.items():
-        value_vector = model.encode(value)
-        similarity = np.dot(query_vector, value_vector) / (np.linalg.norm(query_vector) * np.linalg.norm(value_vector))
-        if similarity > 0.5:  # Threshold for relevance
-            relevant_data += f"{value}\n"
-    
-    return relevant_data
+# Store Knowledge Base in Vector Database (if not already stored)
+def store_knowledge():
+    if collection.count() == 0:  # Avoid duplicate storage
+        for key, value in knowledge_base.items():
+            vector = model.encode(value).tolist()
+            collection.add(ids=[key], embeddings=[vector], metadatas=[{"content": value}])
 
+store_knowledge()  # Ensure database is populated
+
+# Function to Retrieve Relevant Data Using Vector Search
+def retrieve_relevant_data(query):
+    query_vector = model.encode(query).tolist()
+    
+    # Search for top 2 most relevant documents
+    results = collection.query(query_embeddings=[query_vector], n_results=2)
+    
+    # Extract and return relevant content
+    relevant_data = "\n".join([doc['content'] for doc in results['metadatas'][0]])
+    return relevant_data if relevant_data else "No relevant data found."
+
+# Question Answering System
 def question_answering_system(query):
     try:
-        # Retrieve relevant data
+        # Retrieve relevant data from vector database
         relevant_data = retrieve_relevant_data(query)
         
-        # Augment the input prompt
+        # Augment query with context
         augmented_query = f"""
         {query}
-        
+
         Given the context:
         {relevant_data}
-        
+
         Create a structured product roadmap for '{st.session_state.product_name}'.
         **Format the roadmap in "Phase X" style** (e.g., Phase 1, Phase 2).
         Each phase should include:
-        - **Phase Name**: (e.g., Phase 1: Research and Planning)
-        - **Timeline**: (Format: "Week X-Y, YYYY-MM-DD to YYYY-MM-DD")
-        - **Tasks**: (List of key tasks with assigned roles)
-        - **Deliverables**: (Expected outputs from this phase)
-        - **Ensure correct date formatting in YYYY-MM-DD to YYYY-MM-DD**
-        - **Ensure phase names are meaningful (e.g., Research and Planning, Development, Testing, etc.)**
+        - **Phase Name**
+        - **Timeline** (YYYY-MM-DD to YYYY-MM-DD)
+        - **Tasks**
+        - **Deliverables**
 
         Project starts on {st.session_state.start_date} and ends on {st.session_state.end_date}.
         Team: {st.session_state.team}.
@@ -88,9 +102,8 @@ if 'roadmap_generated' not in st.session_state:
 # Input Page
 def input_page():
     st.title("🤖 AI Product Manager")
-    st.write("Enter the details below to generate a **structured product roadmap**.")
+    st.write("Enter details to generate a **structured product roadmap**.")
 
-    # Input Fields
     with st.form("product_details"):
         col1, col2 = st.columns(2)
         with col1:
@@ -100,20 +113,16 @@ def input_page():
         with col2:
             product_description = st.text_area("📝 Product Description:")
 
-        # Validate dates (only if both dates are selected)
         if st.session_state.start_date and st.session_state.end_date:
             if st.session_state.end_date < st.session_state.start_date:
                 st.error("🚨 End date cannot be earlier than start date.")
-        
-        # Team Building Section
+
         st.subheader("👥 Build Your Team")
         roles = ["Backend Developer", "Frontend Developer", "Tester", "UI/UX Designer", "Data Analyst", "DevOps Engineer"]
         selected_roles = [role for role in roles if st.checkbox(role)]
 
-        # ✅ Submit Button (ONLY ONE)
         submit_button = st.form_submit_button("🚀 Generate Roadmap")
 
-    # ✅ If Submit Button is Clicked, Process Input
     if submit_button:
         if st.session_state.product_name and product_description and st.session_state.start_date and st.session_state.end_date:
             st.session_state.team = ", ".join(selected_roles) if selected_roles else "No team selected"
@@ -123,79 +132,13 @@ def input_page():
 # Roadmap Page
 def roadmap_page():
     st.title("📌 Generated Roadmap")
-    query = f"Create a product roadmap for '{st.session_state.product_name}'. Project starts on {st.session_state.start_date} and ends on {st.session_state.end_date}. Team: {st.session_state.team}."
+    query = f"Create a roadmap for '{st.session_state.product_name}'. Starts: {st.session_state.start_date}, Ends: {st.session_state.end_date}, Team: {st.session_state.team}."
 
-    # Get roadmap response from LLM (formatted correctly)
     answer = question_answering_system(query)
-
-    # Display LLM-generated roadmap
     st.write(answer)
-
-    # **Check if the output contains "Phase X"**
-    if "Phase" in answer:
-        # **Extract milestones & generate Gantt chart**
-        milestones = []
-        start_dates = []
-        end_dates = []
-        roadmap_lines = answer.split("\n")
-
-        for i, line in enumerate(roadmap_lines):
-            if "Phase" in line:
-                # Extract phase name
-                phase_name = line.strip()
-                
-                # Find the timeline in the next line
-                if i + 1 < len(roadmap_lines) and "Timeline:" in roadmap_lines[i + 1]:
-                    timeline_line = roadmap_lines[i + 1]
-                    date_range = timeline_line.split(", ")[-1]  # Extract date part
-
-                    try:
-                        start, end = date_range.split(" to ")
-                        start_dates.append(datetime.strptime(start.strip(), "%Y-%m-%d"))
-                        end_dates.append(datetime.strptime(end.strip(), "%Y-%m-%d"))
-                        milestones.append(phase_name)
-                    except ValueError:
-                        continue  # Skip if date format is incorrect
-
-        # Convert extracted data to DataFrame
-        df = pd.DataFrame({
-            "Milestone": milestones,
-            "Start Date": start_dates,
-            "End Date": end_dates
-        })
-
-        # **Sort phases by Start Date instead of milestone number**
-        df = df.sort_values(by="Start Date", ascending=True)
-
-        # **📊 Generate Gantt Chart**
-        if not df.empty:
-            fig = px.timeline(
-                df,
-                x_start="Start Date",
-                x_end="End Date",
-                y="Milestone",
-                title="📅 Project Gantt Chart",
-                color="Milestone",
-                labels={"Milestone": "Project Phases"}
-            )
-
-            # Enable grid for better visualization
-            fig.update_layout(
-                xaxis=dict(showgrid=True),
-                yaxis=dict(categoryorder="total ascending"),  # Ensure correct phase order
-                legend_title="Project Phases"
-            )
-
-            # **Display Gantt Chart**
-            st.subheader("📊 Gantt Chart for Project Timeline")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("⚠️ Could not extract phases correctly. Please check the LLM output.")
-    else:
-        st.warning("⚠️ No structured phases found in the roadmap. Displaying text only.")
 
 # Main App Logic
 if not st.session_state.roadmap_generated:
-    input_page()  # Show the input page
+    input_page()
 else:
-    roadmap_page()  # Show the roadmap page
+    roadmap_page()
