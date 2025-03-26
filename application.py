@@ -3,13 +3,11 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 from groq import Groq
-
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import chromadb  # Vector database
 
 # Secure API Key Storage
-API_KEY = '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'
+API_KEY = 'gsk_bURZU3TF0hHDaZvtXQ8WGdyb3FYbaGzNbL2pXQl9k4ONJ5I3B0T'
 if not API_KEY:
     st.error("API key not found. Please set the 'GROQ_API_KEY' environment variable.")
     st.stop()
@@ -17,32 +15,38 @@ if not API_KEY:
 # Initialize Groq Client
 client = Groq(api_key=API_KEY)
 
-# Load Embedding Model
-model = SentenceTransformer('all-MiniLM-L6-v2')
-
 # Initialize Vector Database (ChromaDB)
 chroma_client = chromadb.PersistentClient(path="./chroma_db")  # Persistent storage
 collection = chroma_client.get_or_create_collection(name="knowledge_base")
 
-# Example External Knowledge Base (You can expand this)
+# Example External Knowledge Base
 knowledge_base = {
     "short_project": "For short projects, prioritize core features and allocate tasks efficiently.",
     "agile_methodology": "Use agile methodologies for iterative development and quick feedback loops.",
     "teamwork": "Encourage open communication and collaboration among team members.",
 }
 
+# Function to Get Embeddings from Groq
+def get_embedding(text):
+    """Generates text embeddings using Groq API."""
+    response = client.chat.completions.create(
+        model="llama3-70b-8192",
+        messages=[{"role": "user", "content": f"Generate a numerical embedding for: {text}"}]
+    )
+    return np.array([float(x) for x in response.choices[0].message.content.split()])  # Convert to list
+
 # Store Knowledge Base in Vector Database (if not already stored)
 def store_knowledge():
     if collection.count() == 0:  # Avoid duplicate storage
         for key, value in knowledge_base.items():
-            vector = model.encode(value).tolist()
+            vector = get_embedding(value).tolist()
             collection.add(ids=[key], embeddings=[vector], metadatas=[{"content": value}])
 
 store_knowledge()  # Ensure database is populated
 
 # Function to Retrieve Relevant Data Using Vector Search
 def retrieve_relevant_data(query):
-    query_vector = model.encode(query).tolist()
+    query_vector = get_embedding(query).tolist()
     
     # Search for top 2 most relevant documents
     results = collection.query(query_embeddings=[query_vector], n_results=2)
